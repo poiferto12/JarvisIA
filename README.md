@@ -1,4 +1,4 @@
-# JarvisIA (0.2)
+# Jarvis IA (0.2)
 
 💡 **Literalmente Jarvis.**  
 Inspirado en el icónico J.A.R.V.I.S. de Tony Stark. Utiliza OpenAI GPT-4, ElevenLabs y varias herramientas del sistema para responder preguntas, ejecutar comandos y realizar tareas automatizadas.
@@ -18,5 +18,34 @@ Inspirado en el icónico J.A.R.V.I.S. de Tony Stark. Utiliza OpenAI GPT-4, Eleve
 
 ### 1️⃣ Clona este repositorio:  
 ```bash
-git clone https://github.com/tu-usuario/jarvis-assistant.git
+git clone https://github.com/poiferto12/JarvisAI.git
 cd jarvis-assistant
+```
+### 2️⃣ Instala las dependencias:
+```bash
+pip install -r requirements.txt
+```
+### 3️⃣ Configura tus claves API en variables de entorno:
+```bash
+export OPENAI_API_KEY="tu-clave-openai"
+export ELEVENLABS_API_KEY="tu-clave-elevenlabs"
+```
+### 4️⃣ Ejecuta el asistente:
+```bash
+python chatbot.py
+```
+---
+## 🎤 Uso
+Habla con JARVIS presionando Enter e interrumpe la voz con la tecla ESC.
+### Ejemplos de comandos:
+
+- "Crea un archivo llamado notas.txt"
+- "Muestra los procesos en ejecución"
+- "Dime cuánta memoria RAM estoy usando"
+
+---
+
+## 🛠️ Planes a futuro:
+- Mejora del reconocimiento y la síntesis de voz
+- Integracion de Google Search API para busquedas mas avanzadas
+- Integracion con Blender API para generacion de modelos 3D
