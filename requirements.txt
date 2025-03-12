@@ -1,0 +1,18 @@
+# APIs principales
+openai>=1.0.0
+elevenlabs>=0.2.24
+
+# Reconocimiento de voz
+SpeechRecognition>=3.10.0
+PyAudio>=0.2.13
+
+# Monitoreo del sistema
+psutil>=5.9.5
+
+# Control de teclado
+keyboard>=0.13.5
+
+# Utilidades
+python-dotenv>=1.0.0
+requests>=2.31.0
+
