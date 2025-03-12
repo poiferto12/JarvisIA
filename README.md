@@ -18,7 +18,7 @@ Inspirado en el icónico J.A.R.V.I.S. de Tony Stark. Utiliza OpenAI GPT-4, Eleve
 
 ### 1️⃣ Clona este repositorio:  
 ```bash
-git clone https://github.com/poiferto12/JarvisAI.git
+git clone https://github.com/poiferto12/JarvisIA.git
 cd jarvis-assistant
 ```
 ### 2️⃣ Instala las dependencias:
