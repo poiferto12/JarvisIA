@@ -14,7 +14,7 @@ Inspirado en el icónico J.A.R.V.I.S. de Tony Stark. Utiliza OpenAI GPT-4, Eleve
 
 ---
 
-## 🛠️ Instalación  
+## 🛠️ Instalación Windows 
 
 ### 1️⃣ Clona este repositorio:  
 ```bash
