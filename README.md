@@ -14,7 +14,7 @@ Inspirado en el icónico J.A.R.V.I.S. de Tony Stark. Utiliza OpenAI GPT-4, Eleve
 ✅ **Añadido un menu simple** para configurar el chatbot y mayor calidad de vida.  
 ✅ **Ahora es posible usar solo texto**, pudiendo prescindir de la clave de Elevenlabs.  
 ✅ **Si por algun motivo no se pudiese aplicar la sintesis de voz, se pasaría a modo texto automaticamente**  
-✅**Jarvis ahora funciona en Linux y Windows**  
+✅**Jarvis ahora funciona en Linux y Windows** y tambien deberia de funcionar en MAC, pero no soy rico, asi que no puedo testearlo.
 
 ## 🛠️ Instalación Windows
 
@@ -130,3 +130,4 @@ Habla con JARVIS presionando Enter e interrumpe la voz con la tecla ESC.
 
 ## Notas 
 - El codigo python que genera para ejecutar ciertas acciones en el SO es incorrecto la mitad de las veces. La mayoría de errores suelen estar en la sintaxis del código.
+- El codigo que se intenta ejecutar se hace en un entorno seguro con ciertos comandos permitidos, de igual forma, es importante tener cuidado con no borrar el ordenador entero.
