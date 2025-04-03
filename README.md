@@ -65,6 +65,14 @@ python chatbot.py
 
 ## 🐧 Instalación en Linux
 
+### 0️⃣ Prerrequisitos:
+
+```plaintext
+- Python: Versión 3.8 o superior
+- Pip: Gestor de paquetes de Python
+- Git: Para clonar el repositorio
+```
+
 ### 1️⃣ Clona este repositorio:
 
 ```shellscript
@@ -131,3 +139,26 @@ Habla con JARVIS presionando Enter e interrumpe la voz con la tecla ESC.
 ## Notas 
 - El codigo python que genera para ejecutar ciertas acciones en el SO es incorrecto la mitad de las veces. La mayoría de errores suelen estar en la sintaxis del código.
 - El codigo que se intenta ejecutar se hace en un entorno seguro con ciertos comandos permitidos, de igual forma, es importante tener cuidado con no borrar el ordenador entero.
+
+## Contribuir al Proyecto
+
+Si deseas contribuir (por favor), sigue estos pasos:
+
+1. Haz un fork del repositorio.
+2. Crea una nueva rama para tus cambios:
+   
+   ```git
+   git checkout -b mi-nueva-rama
+   ```
+3. Realiza cambios y súbelos:
+   
+   ```git
+   git add .
+   git commit -m "Descripción clara del cambio"
+   git push origin mi-nueva-rama
+   ```
+4. Abre un Pull Request en GitHub.
+
+## Contacto y Soporte
+
+Si tienes dudas o problemas, abre un "Issue" en el repositorio e intentaré ayudar. (Tengo que decir que estoy haciendo la mayoría de esto con IA, ya que no tengo tanto conocimiento sobre el tema y es muy probable que no pueda ser siempre de ayuda, igualmente haré todo lo que esté en mi poder).
