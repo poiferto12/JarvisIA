@@ -4,64 +4,109 @@ import psutil
 import glob
 from openai import OpenAI
 import speech_recognition as sr
-from elevenlabs import ElevenLabs, Voice, play
 import asyncio
 import time
 import threading
 import keyboard
 import re
-import inspect
 import sys
 import shutil
+import queue
+import json
+from pathlib import Path
+
+# Verificar si elevenlabs está disponible
+try:
+    from elevenlabs import ElevenLabs, Voice, play
+    ELEVENLABS_DISPONIBLE = True
+except ImportError:
+    ELEVENLABS_DISPONIBLE = False
 
 # Configuración de la clave API de OpenAI desde la variable de entorno
 client1 = OpenAI()
 
-# Configuración de ElevenLabs API
-ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
-client = ElevenLabs(
-    api_key=ELEVENLABS_API_KEY,
-)
-
 # Modelo y parámetros
 MAX_HISTORIAL = 10
 
+# Configuración por defecto
+CONFIG_DEFAULT = {
+    "modo_entrada": "texto",  # "texto" o "voz"
+    "modo_salida": "texto",   # "texto" o "voz"
+    "sensibilidad_voz": 300,  # Umbral de energía (300-700)
+    "pausa_voz": 1.0,         # Pausa en segundos
+    "duracion_ajuste": 0.5,   # Duración del ajuste de ruido
+    "voice_id": "gD1IexrzCvsXPHUuT0s3",  # ID de voz de ElevenLabs
+    "modelo_voz": "eleven_multilingual_v2",  # Modelo de voz
+    "max_tokens": 500,        # Tokens máximos para GPT
+    "temperatura": 0.7        # Temperatura para GPT
+}
+
+# Ruta del archivo de configuración
+CONFIG_PATH = Path.home() / "jarvis_config.json"
+
 class JarvisAssistant:
-    def __init__(self):
+    def __init__(self, config=None):
+        # Cargar configuración
+        self.config = config if config else self.cargar_config()
+        
+        # Inicializar variables
         self.conversation_history = []
         self.recognizer = sr.Recognizer()
-        self.voice = Voice(voice_id="gD1IexrzCvsXPHUuT0s3")
         self.is_speaking = False
         self.stop_speaking = False
+        self.listening = False
+        self.audio_queue = queue.Queue()
+        
+        # Configurar reconocedor de voz
+        self.recognizer.pause_threshold = self.config["pausa_voz"]
+        self.recognizer.energy_threshold = self.config["sensibilidad_voz"]
+        
+        # Inicializar ElevenLabs si está disponible y se usa voz
+        if ELEVENLABS_DISPONIBLE and self.config["modo_salida"] == "voz":
+            try:
+                ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
+                self.client_voz = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+                self.voice = Voice(voice_id=self.config["voice_id"])
+                print("Síntesis de voz inicializada correctamente.")
+            except Exception as e:
+                print(f"Error al inicializar la síntesis de voz: {e}")
+                self.config["modo_salida"] = "texto"
+                print("Cambiando a modo de salida de texto.")
         
         # Crear un entorno seguro con acceso a módulos y funciones básicas
         self.safe_environment = self._create_safe_environment()
+
+    def cargar_config(self):
+        """Carga la configuración desde un archivo o usa los valores por defecto"""
+        if CONFIG_PATH.exists():
+            try:
+                with open(CONFIG_PATH, 'r') as f:
+                    config = json.load(f)
+                    # Asegurarse de que todos los campos existan
+                    for key, value in CONFIG_DEFAULT.items():
+                        if key not in config:
+                            config[key] = value
+                    return config
+            except Exception as e:
+                print(f"Error al cargar la configuración: {e}")
+        
+        return CONFIG_DEFAULT.copy()
+
+    def guardar_config(self):
+        """Guarda la configuración actual en un archivo"""
+        try:
+            with open(CONFIG_PATH, 'w') as f:
+                json.dump(self.config, f, indent=4)
+            print(f"Configuración guardada en {CONFIG_PATH}")
+            return True
+        except Exception as e:
+            print(f"Error al guardar la configuración: {e}")
+            return False
 
     def _create_safe_environment(self):
         """Crea un entorno de ejecución con acceso a módulos y funciones seguras"""
         # Módulos completos o parciales que queremos permitir
         safe_env = {
-            # Módulos estándar
-            "os": self._create_safe_module(os, [
-                "listdir", "getcwd", "mkdir", "makedirs", "remove", "rmdir", 
-                "rename", "path", "environ", "getenv", "chdir", "walk"
-            ]),
-            "subprocess": self._create_safe_module(subprocess, [
-                "run", "Popen", "PIPE", "STDOUT", "call", "check_output"
-            ]),
-            "glob": glob,
-            "re": re,
-            "time": self._create_safe_module(time, [
-                "sleep", "time", "ctime", "strftime", "localtime"
-            ]),
-            "shutil": self._create_safe_module(shutil, [
-                "copy", "copy2", "copytree", "move", "rmtree"
-            ]),
-            "psutil": self._create_safe_module(psutil, [
-                "process_iter", "cpu_percent", "virtual_memory", "disk_usage", 
-                "net_io_counters", "sensors_temperatures"
-            ]),
-            
             # Funciones integradas de Python
             "print": print,
             "input": input,
@@ -98,43 +143,172 @@ class JarvisAssistant:
             "help": help,
         }
         
+        # Añadir módulos de forma segura
+        # OS - Funciones básicas
+        safe_os = type('SafeOS', (), {})()
+        safe_os.listdir = os.listdir
+        safe_os.getcwd = os.getcwd
+        safe_os.mkdir = os.mkdir
+        safe_os.makedirs = os.makedirs
+        safe_os.remove = os.remove
+        safe_os.rmdir = os.rmdir
+        safe_os.rename = os.rename
+        safe_os.chdir = os.chdir
+        safe_os.walk = os.walk
+        
+        # OS.PATH - Funciones de manejo de rutas
+        safe_os_path = type('SafeOSPath', (), {})()
+        safe_os_path.join = os.path.join
+        safe_os_path.exists = os.path.exists
+        safe_os_path.isfile = os.path.isfile
+        safe_os_path.isdir = os.path.isdir
+        safe_os_path.abspath = os.path.abspath
+        safe_os_path.basename = os.path.basename
+        safe_os_path.dirname = os.path.dirname
+        safe_os_path.expanduser = os.path.expanduser
+        safe_os_path.splitext = os.path.splitext
+        safe_os.path = safe_os_path
+        
+        # Subprocess - Funciones para ejecutar comandos
+        safe_subprocess = type('SafeSubprocess', (), {})()
+        safe_subprocess.run = subprocess.run
+        safe_subprocess.Popen = subprocess.Popen
+        safe_subprocess.PIPE = subprocess.PIPE
+        safe_subprocess.STDOUT = subprocess.STDOUT
+        safe_subprocess.call = subprocess.call
+        safe_subprocess.check_output = subprocess.check_output
+        
+        # Shutil - Operaciones de archivos avanzadas
+        safe_shutil = type('SafeShutil', (), {})()
+        safe_shutil.copy = shutil.copy
+        safe_shutil.copy2 = shutil.copy2
+        safe_shutil.copytree = shutil.copytree
+        safe_shutil.move = shutil.move
+        safe_shutil.rmtree = shutil.rmtree
+        
+        # Psutil - Monitoreo del sistema
+        safe_psutil = type('SafePsutil', (), {})()
+        safe_psutil.process_iter = psutil.process_iter
+        safe_psutil.cpu_percent = psutil.cpu_percent
+        safe_psutil.virtual_memory = psutil.virtual_memory
+        safe_psutil.disk_usage = psutil.disk_usage
+        if hasattr(psutil, 'net_io_counters'):
+            safe_psutil.net_io_counters = psutil.net_io_counters
+        if hasattr(psutil, 'sensors_temperatures'):
+            safe_psutil.sensors_temperatures = psutil.sensors_temperatures
+        
+        # Time - Funciones de tiempo
+        safe_time = type('SafeTime', (), {})()
+        safe_time.sleep = time.sleep
+        safe_time.time = time.time
+        safe_time.ctime = time.ctime
+        safe_time.strftime = time.strftime
+        safe_time.localtime = time.localtime
+        
+        # Añadir todos los módulos seguros al entorno
+        safe_env["os"] = safe_os
+        safe_env["subprocess"] = safe_subprocess
+        safe_env["glob"] = glob
+        safe_env["re"] = re
+        safe_env["time"] = safe_time
+        safe_env["shutil"] = safe_shutil
+        safe_env["psutil"] = safe_psutil
+        
         return safe_env
 
-    def _create_safe_module(self, module, allowed_attributes):
-        """Crea una versión segura de un módulo con acceso limitado a atributos específicos"""
-        safe_module = type('SafeModule', (), {})()
+    def listen_callback(self, recognizer, audio):
+        """Callback para procesar el audio capturado"""
+        try:
+            if not self.listening:
+                return
+                
+            text = recognizer.recognize_google(audio, language="es-ES")
+            if text:
+                print(f"Reconocido: {text}")
+                self.audio_queue.put(text)
+        except sr.UnknownValueError:
+            print("No se pudo entender el audio")
+        except sr.RequestError as e:
+            print(f"Error en el servicio de reconocimiento de voz: {e}")
+
+    def stop_listening_callback(self):
+        """Detiene la escucha cuando se presiona Enter"""
+        self.listening = False
+        print("\nDetención de escucha solicitada...")
+
+    async def listen_voice(self) -> str:
+        """
+        Escucha la entrada de voz del usuario con mejoras.
+        Comienza a escuchar cuando se presiona Enter y termina cuando se vuelve a presionar Enter.
+        """
+        print("Presiona Enter para comenzar a hablar...")
+        input()
         
-        for attr_name in allowed_attributes:
-            if hasattr(module, attr_name):
-                # Si el atributo es un submódulo (como os.path), crear un submódulo seguro
-                attr = getattr(module, attr_name)
-                if inspect.ismodule(attr):
-                    # Obtener todos los atributos del submódulo
-                    sub_attrs = [name for name in dir(attr) 
-                                if not name.startswith('_') and 
-                                not name in ['system', 'exec', 'eval', 'execfile', 'compile']]
-                    setattr(safe_module, attr_name, self._create_safe_module(attr, sub_attrs))
-                else:
-                    setattr(safe_module, attr_name, attr)
+        # Inicializar variables
+        self.listening = True
+        self.audio_queue = queue.Queue()
+        collected_text = []
         
-        return safe_module
+        # Configurar el callback para detener la escucha cuando se presiona Enter
+        keyboard.add_hotkey('enter', self.stop_listening_callback)
+        
+        print("Escuchando... (Presiona Enter para detener)")
+        
+        # Usar el reconocedor en modo no bloqueante
+        with sr.Microphone() as source:
+            # Ajustar para el ruido ambiental
+            print("Ajustando para el ruido ambiental...")
+            self.recognizer.adjust_for_ambient_noise(source, duration=self.config["duracion_ajuste"])
+            print(f"Umbral de energía ajustado a: {self.recognizer.energy_threshold}")
+            
+            # Iniciar escucha en segundo plano
+            stop_listening = self.recognizer.listen_in_background(source, self.listen_callback)
+            
+            # Esperar hasta que se presione Enter o haya un timeout
+            timeout = time.time() + 60  # 60 segundos máximo de escucha
+            while self.listening and time.time() < timeout:
+                try:
+                    # Verificar si hay texto reconocido en la cola
+                    text = self.audio_queue.get(timeout=0.5)
+                    collected_text.append(text)
+                    # Reiniciar el timeout cuando se detecta habla
+                    timeout = time.time() + 60
+                except queue.Empty:
+                    # No hay texto nuevo, continuar esperando
+                    pass
+                
+                # Si no ha habido actividad por 5 segundos y hay texto, detener
+                if collected_text and time.time() - timeout > -55:  # 60-55=5 segundos de inactividad
+                    print("Inactividad detectada, deteniendo escucha...")
+                    self.listening = False
+            
+            # Detener la escucha en segundo plano
+            stop_listening(wait_for_stop=False)
+        
+        # Eliminar el hotkey
+        keyboard.remove_hotkey('enter')
+        
+        # Unir todo el texto reconocido
+        full_text = " ".join(collected_text)
+        
+        if full_text:
+            print(f"Usuario: {full_text}")
+            return full_text
+        else:
+            print("No se detectó ninguna entrada de voz.")
+            return ""
+
+    async def listen_text(self) -> str:
+        """Obtiene entrada de texto del usuario"""
+        text = input("Tú: ")
+        return text
 
     async def listen(self) -> str:
-        # Versión simplificada: presiona Enter para hablar
-        input("Presiona Enter para comenzar a hablar...")
-        with sr.Microphone() as source:
-            print("Escuchando...")
-            audio = self.recognizer.listen(source)
-            try:
-                text = self.recognizer.recognize_google(audio, language="es-ES")
-                print(f"Usuario: {text}")
-                return text
-            except sr.UnknownValueError:
-                print("No se pudo entender el audio")
-                return ""
-            except sr.RequestError as e:
-                print(f"Error en el servicio de reconocimiento de voz; {e}")
-                return ""
+        """Obtiene entrada del usuario según el modo configurado"""
+        if self.config["modo_entrada"] == "voz":
+            return await self.listen_voice()
+        else:
+            return await self.listen_text()
 
     def split_text_into_chunks(self, text, max_chars=75):
         """Divide el texto en fragmentos más pequeños para una respuesta más rápida"""
@@ -158,23 +332,34 @@ class JarvisAssistant:
 
     def speak_chunk(self, text):
         """Genera y reproduce un fragmento de audio"""
+        if not ELEVENLABS_DISPONIBLE or self.config["modo_salida"] != "voz":
+            return
+            
         try:
             if self.stop_speaking:
                 return
                 
-            audio = client.generate(
+            audio = self.client_voz.generate(
                 text=text,
                 voice=self.voice,
-                model="eleven_multilingual_v2"
+                model=self.config["modelo_voz"]
             )
             play(audio)
         except Exception as e:
             print(f"Error al generar voz: {str(e)}")
+            # Cambiar a modo texto si hay error
+            print("Cambiando a modo de salida de texto.")
+            self.config["modo_salida"] = "texto"
 
     async def speak(self, text: str):
-        """Habla el texto dividido en fragmentos para una respuesta más rápida"""
+        """Habla o muestra el texto según el modo configurado"""
+        # Siempre mostrar el texto en la consola
         print(f"Jarvis: {text}")
         
+        # Si el modo es texto, terminar aquí
+        if self.config["modo_salida"] != "voz" or not ELEVENLABS_DISPONIBLE:
+            return
+            
         # Establecer flags
         self.is_speaking = True
         self.stop_speaking = False
@@ -305,11 +490,19 @@ class JarvisAssistant:
                 {"role": "system", "content": """Eres JARVIS, la IA creada por Tony Stark. Puedes generar código Python para ejecutar comandos del usuario.
                 
                 IMPORTANTE: Cuando el usuario te pida realizar una acción en el sistema, DEBES responder con 'CODIGO:' seguido del código Python en una nueva línea.
+                IMPORTANTE: Cuando generes código Python, NO incluyas delimitadores de formato como ```python o ``` alrededor del código. 
+                Proporciona SOLO el código Python puro que se ejecutará directamente.
+
+                (INCORRECTO:
+                CODIGO:
+                ```python
+                print("Hola mundo"))
                 
                 Tienes acceso a los siguientes módulos y funciones:
                 
                 1. Módulos:
-                   - os: listdir, getcwd, mkdir, makedirs, remove, rmdir, rename, path, environ, getenv, chdir, walk
+                   - os: listdir, getcwd, mkdir, makedirs, remove, rmdir, rename, path, chdir, walk
+                   - os.path: join, exists, isfile, isdir, abspath, basename, dirname, expanduser, splitext
                    - subprocess: run, Popen, PIPE, STDOUT, call, check_output
                    - glob: todas las funciones
                    - re: todas las funciones
@@ -384,8 +577,8 @@ class JarvisAssistant:
             response = client1.chat.completions.create(
                 model="gpt-4",
                 messages=messages,
-                max_tokens=500,
-                temperature=0.7
+                max_tokens=self.config["max_tokens"],
+                temperature=self.config["temperatura"]
             )
             
             response_text = response.choices[0].message.content
@@ -394,19 +587,269 @@ class JarvisAssistant:
             print(f"Error en la solicitud a OpenAI: {str(e)}")
             return "Hubo un error al obtener la respuesta."
 
+def mostrar_menu_configuracion(config_actual):
+    """Muestra un menú para configurar las opciones de JARVIS"""
+    while True:
+        print("\n" + "=" * 50)
+        print(" CONFIGURACIÓN DE JARVIS ")
+        print("=" * 50)
+        print(f"1. Modo de entrada: {config_actual['modo_entrada']}")
+        print(f"2. Modo de salida: {config_actual['modo_salida']}")
+        print(f"3. Sensibilidad de voz: {config_actual['sensibilidad_voz']}")
+        print(f"4. Pausa de voz: {config_actual['pausa_voz']} segundos")
+        print(f"5. Duración del ajuste de ruido: {config_actual['duracion_ajuste']} segundos")
+        print(f"6. Tokens máximos: {config_actual['max_tokens']}")
+        print(f"7. Temperatura: {config_actual['temperatura']}")
+        print("8. Guardar configuración")
+        print("9. Iniciar JARVIS")
+        print("0. Salir")
+        print("=" * 50)
+        
+        opcion = input("Selecciona una opción: ")
+        
+        if opcion == "1":
+            modo = input("Modo de entrada (texto/voz): ").lower()
+            if modo in ["texto", "voz"]:
+                config_actual["modo_entrada"] = modo
+            else:
+                print("Opción no válida. Debe ser 'texto' o 'voz'.")
+        
+        elif opcion == "2":
+            modo = input("Modo de salida (texto/voz): ").lower()
+            if modo in ["texto", "voz"]:
+                if modo == "voz" and not ELEVENLABS_DISPONIBLE:
+                    print("Advertencia: ElevenLabs no está disponible. Se usará el modo de texto.")
+                    config_actual["modo_salida"] = "texto"
+                else:
+                    config_actual["modo_salida"] = modo
+            else:
+                print("Opción no válida. Debe ser 'texto' o 'voz'.")
+        
+        elif opcion == "3":
+            try:
+                valor = int(input("Sensibilidad de voz (300-700, menor es más sensible): "))
+                if 100 <= valor <= 1000:
+                    config_actual["sensibilidad_voz"] = valor
+                else:
+                    print("El valor debe estar entre 100 y 1000.")
+            except ValueError:
+                print("Debes ingresar un número.")
+        
+        elif opcion == "4":
+            try:
+                valor = float(input("Pausa de voz en segundos (0.5-2.0): "))
+                if 0.1 <= valor <= 3.0:
+                    config_actual["pausa_voz"] = valor
+                else:
+                    print("El valor debe estar entre 0.1 y 3.0.")
+            except ValueError:
+                print("Debes ingresar un número.")
+        
+        elif opcion == "5":
+            try:
+                valor = float(input("Duración del ajuste de ruido en segundos (0.1-2.0): "))
+                if 0.1 <= valor <= 2.0:
+                    config_actual["duracion_ajuste"] = valor
+                else:
+                    print("El valor debe estar entre 0.1 y 2.0.")
+            except ValueError:
+                print("Debes ingresar un número.")
+        
+        elif opcion == "6":
+            try:
+                valor = int(input("Tokens máximos (100-1000): "))
+                if 100 <= valor <= 1000:
+                    config_actual["max_tokens"] = valor
+                else:
+                    print("El valor debe estar entre 100 y 1000.")
+            except ValueError:
+                print("Debes ingresar un número.")
+        
+        elif opcion == "7":
+            try:
+                valor = float(input("Temperatura (0.0-1.0): "))
+                if 0.0 <= valor <= 1.0:
+                    config_actual["temperatura"] = valor
+                else:
+                    print("El valor debe estar entre 0.0 y 1.0.")
+            except ValueError:
+                print("Debes ingresar un número.")
+        
+        elif opcion == "8":
+            # Guardar configuración
+            try:
+                with open(CONFIG_PATH, 'w') as f:
+                    json.dump(config_actual, f, indent=4)
+                print(f"Configuración guardada en {CONFIG_PATH}")
+            except Exception as e:
+                print(f"Error al guardar la configuración: {e}")
+        
+        elif opcion == "9":
+            # Iniciar JARVIS
+            return config_actual
+        
+        elif opcion == "0":
+            print("Saliendo...")
+            sys.exit(0)
+        
+        else:
+            print("Opción no válida.")
+
+async def probar_reconocimiento_voz():
+    """Función para probar el reconocimiento de voz"""
+    print("\n" + "=" * 50)
+    print(" PRUEBA DE RECONOCIMIENTO DE VOZ ")
+    print("=" * 50)
+    print("Esta prueba te permitirá ajustar los parámetros de reconocimiento de voz.")
+    
+    # Crear un reconocedor
+    recognizer = sr.Recognizer()
+    
+    # Valores iniciales
+    energy_threshold = 300
+    pause_threshold = 1.0
+    
+    while True:
+        print(f"\nUmbral de energía actual: {energy_threshold}")
+        print(f"Umbral de pausa actual: {pause_threshold}")
+        print("\n1. Probar con configuración actual")
+        print("2. Ajustar umbral de energía")
+        print("3. Ajustar umbral de pausa")
+        print("4. Volver al menú principal")
+        
+        opcion = input("\nSelecciona una opción: ")
+        
+        if opcion == "1":
+            # Configurar el reconocedor
+            recognizer.energy_threshold = energy_threshold
+            recognizer.pause_threshold = pause_threshold
+            
+            print("\nPresiona Enter y comienza a hablar...")
+            input()
+            
+            try:
+                with sr.Microphone() as source:
+                    print("Ajustando para el ruido ambiental...")
+                    recognizer.adjust_for_ambient_noise(source, duration=1.0)
+                    print(f"Umbral de energía ajustado a: {recognizer.energy_threshold}")
+                    
+                    print("Escuchando...")
+                    audio = recognizer.listen(source)
+                    
+                    print("Reconociendo...")
+                    text = recognizer.recognize_google(audio, language="es-ES")
+                    print(f"Texto reconocido: {text}")
+            except sr.UnknownValueError:
+                print("No se pudo entender el audio")
+            except sr.RequestError as e:
+                print(f"Error en el servicio de reconocimiento de voz: {e}")
+            except Exception as e:
+                print(f"Error: {e}")
+        
+        elif opcion == "2":
+            try:
+                valor = int(input("Nuevo umbral de energía (100-1000, menor es más sensible): "))
+                if 100 <= valor <= 1000:
+                    energy_threshold = valor
+                else:
+                    print("El valor debe estar entre 100 y 1000.")
+            except ValueError:
+                print("Debes ingresar un número.")
+        
+        elif opcion == "3":
+            try:
+                valor = float(input("Nuevo umbral de pausa en segundos (0.1-3.0): "))
+                if 0.1 <= valor <= 3.0:
+                    pause_threshold = valor
+                else:
+                    print("El valor debe estar entre 0.1 y 3.0.")
+            except ValueError:
+                print("Debes ingresar un número.")
+        
+        elif opcion == "4":
+            return {"sensibilidad_voz": energy_threshold, "pausa_voz": pause_threshold}
+        
+        else:
+            print("Opción no válida.")
+
 async def main():
-    jarvis = JarvisAssistant()
+    print("\n" + "=" * 50)
+    print(" JARVIS - ASISTENTE DE IA ")
+    print("=" * 50)
+    print("1. Iniciar JARVIS con configuración por defecto")
+    print("2. Configurar JARVIS")
+    print("3. Probar reconocimiento de voz")
+    print("4. Salir")
+    print("=" * 50)
+    
+    opcion = input("Selecciona una opción: ")
+    
+    config = CONFIG_DEFAULT.copy()
+    
+    if opcion == "1":
+        # Cargar configuración guardada si existe
+        if CONFIG_PATH.exists():
+            try:
+                with open(CONFIG_PATH, 'r') as f:
+                    config_guardada = json.load(f)
+                    # Asegurarse de que todos los campos existan
+                    for key, value in CONFIG_DEFAULT.items():
+                        if key not in config_guardada:
+                            config_guardada[key] = value
+                    config = config_guardada
+                    print("Configuración cargada correctamente.")
+            except Exception as e:
+                print(f"Error al cargar la configuración: {e}")
+                print("Usando configuración por defecto.")
+    
+    elif opcion == "2":
+        # Mostrar menú de configuración
+        config = mostrar_menu_configuracion(config)
+    
+    elif opcion == "3":
+        # Probar reconocimiento de voz
+        ajustes_voz = await probar_reconocimiento_voz()
+        if ajustes_voz:
+            config["sensibilidad_voz"] = ajustes_voz["sensibilidad_voz"]
+            config["pausa_voz"] = ajustes_voz["pausa_voz"]
+        
+        # Volver al menú principal
+        return await main()
+    
+    elif opcion == "4":
+        print("Saliendo...")
+        return
+    
+    else:
+        print("Opción no válida.")
+        return await main()
+    
+    # Iniciar JARVIS con la configuración seleccionada
+    jarvis = JarvisAssistant(config)
     
     # Configurar la tecla para interrumpir la voz (Escape)
     keyboard.add_hotkey('esc', jarvis.interrupt_speech)
     
-    await jarvis.speak("Hola, soy JARVIS. Presiona Enter cuando quieras hablar conmigo. Presiona ESC para interrumpir mi voz.")
+    # Mostrar información sobre el modo actual
+    print("\n" + "=" * 50)
+    print(f" JARVIS - Modo de entrada: {config['modo_entrada'].upper()}, Modo de salida: {config['modo_salida'].upper()} ")
+    print("=" * 50)
+    
+    if config["modo_entrada"] == "texto":
+        print("Escribe tus comandos directamente. Escribe 'salir' o 'adiós' para terminar.")
+    else:
+        print("Presiona Enter para hablar. Presiona Enter nuevamente para detener la grabación.")
+        print("Presiona ESC para interrumpir la voz de JARVIS.")
+    
+    print("=" * 50)
+    
+    await jarvis.speak("Hola, soy JARVIS. ¿En qué puedo ayudarte?")
 
     while True:
         command = await jarvis.listen()
         if not command:
             continue
-        if "adiós" in command.lower():
+        if command.lower() in ["adiós", "adios", "salir", "exit", "quit"]:
             await jarvis.speak("Hasta luego, señor. Estaré aquí si me necesita.")
             break
         await jarvis.process_command(command)
