@@ -1,9 +1,7 @@
-# Jarvis IA (0.2)
+# Jarvis IA (0.4)
 
 💡 **Literalmente Jarvis.**  
 Inspirado en el icónico J.A.R.V.I.S. de Tony Stark. Utiliza OpenAI GPT-4, ElevenLabs y varias herramientas del sistema para responder preguntas, ejecutar comandos y realizar tareas automatizadas.
-
----
 
 ## ✨ Características  
 ✅ **Reconocimiento de voz** (SpeechRecognition) para recibir comandos hablados.  
@@ -12,29 +10,108 @@ Inspirado en el icónico J.A.R.V.I.S. de Tony Stark. Utiliza OpenAI GPT-4, Eleve
 ✅ **Ejecución segura de comandos Python** en un entorno controlado.  
 ✅ **Acceso a funciones del sistema** como archivos, procesos y red.  
 
----
+## Nuevo respecto a la versión anterior
+✅ **Añadido un menu simple** para configurar el chatbot y mayor calidad de vida.  
+✅ **Ahora es posible usar solo texto**, pudiendo prescindir de la clave de Elevenlabs.  
+✅ **Si por algun motivo no se pudiese aplicar la sintesis de voz, se pasaría a modo texto automaticamente**  
+✅**Jarvis ahora funciona en Linux y Windows**  
 
-## 🛠️ Instalación Windows 
+## 🛠️ Instalación Windows
 
-### 1️⃣ Clona este repositorio:  
-```bash
+### 0️⃣ Prerrequisitos:
+
+```plaintext
+- Python 3.8 o superior (asegúrate de marcar "Add Python to PATH" durante la instalación)
+- Git para Windows
+- Microsoft Visual C++ Redistributable (necesario para algunas dependencias)
+```
+
+### 1️⃣ Clona este repositorio:
+
+```bat
 git clone https://github.com/poiferto12/JarvisIA.git
-cd jarvis-assistant
+cd JarvisIA
 ```
+
 ### 2️⃣ Instala las dependencias:
-```bash
+
+```bat
 pip install -r requirements.txt
+
+# Si PyAudio falla al instalar con requirements.txt, prueba instalarlo manualmente:
+# pip install pipwin
+# pipwin install pyaudio
 ```
+
 ### 3️⃣ Configura tus claves API en variables de entorno:
-```bash
-export OPENAI_API_KEY="tu-clave-openai"
-export ELEVENLABS_API_KEY="tu-clave-elevenlabs"
+
+```bat
+# En Command Prompt (CMD)
+set OPENAI_API_KEY=tu-clave-openai
+set ELEVENLABS_API_KEY=tu-clave-elevenlabs
+
+# O en PowerShell
+$env:OPENAI_API_KEY = "tu-clave-openai"
+$env:ELEVENLABS_API_KEY = "tu-clave-elevenlabs"
+
+# Para configurar permanentemente (Panel de Control > Sistema > Configuración avanzada del sistema > Variables de entorno)
 ```
+
 ### 4️⃣ Ejecuta el asistente:
-```bash
+
+```bat
 python chatbot.py
 ```
----
+
+## 🐧 Instalación en Linux
+
+### 1️⃣ Clona este repositorio:
+
+```shellscript
+git clone https://github.com/poiferto12/JarvisIA.git
+cd JarvisIA
+```
+
+### 2️⃣ Instala las dependencias:
+
+#### Dependencias del sistema:
+
+```shellscript
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install python3-pyaudio portaudio19-dev
+
+# Fedora
+sudo dnf install portaudio portaudio-devel
+
+# Arch Linux
+sudo pacman -S portaudio
+```
+
+#### Dependencias de Python:
+
+```shellscript
+pip install -r requirements.txt
+```
+
+### 3️⃣ Configura tus claves API:
+
+```shellscript
+# Temporal (para la sesión actual)
+export OPENAI_API_KEY="tu-clave-openai"
+export ELEVENLABS_API_KEY="tu-clave-elevenlabs"
+
+# Permanente (añadir a tu .bashrc o .zshrc)
+echo 'export OPENAI_API_KEY="tu-clave-openai"' >> ~/.bashrc
+echo 'export ELEVENLABS_API_KEY="tu-clave-elevenlabs"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### 4️⃣ Ejecuta el asistente:
+
+```shellscript
+python chatbot.py
+```
 ## 🎤 Uso
 Habla con JARVIS presionando Enter e interrumpe la voz con la tecla ESC.
 ### Ejemplos de comandos:
@@ -43,9 +120,13 @@ Habla con JARVIS presionando Enter e interrumpe la voz con la tecla ESC.
 - "Muestra los procesos en ejecución"
 - "Dime cuánta memoria RAM estoy usando"
 
----
 
 ## 🛠️ Planes a futuro:
 - Mejora del reconocimiento y la síntesis de voz
+- Mejora de la generacion de código
 - Integracion de Google Search API para busquedas mas avanzadas
 - Integracion con Blender API para generacion de modelos 3D
+- Mejora de la memoria y el retenimiento de informacion entre solicitudes
+
+## Notas 
+- El codigo python que genera para ejecutar ciertas acciones en el SO es incorrecto la mitad de las veces. La mayoría de errores suelen estar en la sintaxis del código.
