@@ -7,13 +7,16 @@ import speech_recognition as sr
 import asyncio
 import time
 import threading
-import keyboard
 import re
 import sys
 import shutil
 import queue
 import json
+import platform
 from pathlib import Path
+
+# Detectar el sistema operativo
+SISTEMA_OPERATIVO = platform.system()  # 'Windows', 'Linux', 'Darwin' (macOS)
 
 # Verificar si elevenlabs está disponible
 try:
@@ -21,6 +24,13 @@ try:
     ELEVENLABS_DISPONIBLE = True
 except ImportError:
     ELEVENLABS_DISPONIBLE = False
+
+# Verificar si keyboard está disponible
+try:
+    import keyboard
+    KEYBOARD_DISPONIBLE = True
+except ImportError:
+    KEYBOARD_DISPONIBLE = False
 
 # Configuración de la clave API de OpenAI desde la variable de entorno
 client1 = OpenAI()
@@ -141,6 +151,12 @@ class JarvisAssistant:
             "type": type,
             "id": id,
             "help": help,
+            # Constantes y funciones multiplataforma
+            "SISTEMA_OPERATIVO": SISTEMA_OPERATIVO,
+            "abrir_archivo": self.abrir_archivo,
+            "obtener_escritorio": self.obtener_escritorio,
+            "obtener_documentos": self.obtener_documentos,
+            "ejecutar_comando": self.ejecutar_comando,
         }
         
         # Añadir módulos de forma segura
@@ -155,6 +171,7 @@ class JarvisAssistant:
         safe_os.rename = os.rename
         safe_os.chdir = os.chdir
         safe_os.walk = os.walk
+        safe_os.environ = os.environ
         
         # OS.PATH - Funciones de manejo de rutas
         safe_os_path = type('SafeOSPath', (), {})()
@@ -205,6 +222,15 @@ class JarvisAssistant:
         safe_time.strftime = time.strftime
         safe_time.localtime = time.localtime
         
+        # Platform - Información del sistema
+        safe_platform = type('SafePlatform', (), {})()
+        safe_platform.system = platform.system
+        safe_platform.platform = platform.platform
+        safe_platform.version = platform.version
+        safe_platform.machine = platform.machine
+        safe_platform.processor = platform.processor
+        safe_platform.architecture = platform.architecture
+        
         # Añadir todos los módulos seguros al entorno
         safe_env["os"] = safe_os
         safe_env["subprocess"] = safe_subprocess
@@ -213,8 +239,87 @@ class JarvisAssistant:
         safe_env["time"] = safe_time
         safe_env["shutil"] = safe_shutil
         safe_env["psutil"] = safe_psutil
+        safe_env["platform"] = safe_platform
+        safe_env["Path"] = Path
         
         return safe_env
+
+    def abrir_archivo(self, ruta):
+        """Abre un archivo con la aplicación predeterminada de manera multiplataforma"""
+        try:
+            ruta_abs = os.path.abspath(os.path.expanduser(ruta))
+            if not os.path.exists(ruta_abs):
+                return f"Error: El archivo {ruta_abs} no existe"
+                
+            if SISTEMA_OPERATIVO == "Windows":
+                os.startfile(ruta_abs)
+            elif SISTEMA_OPERATIVO == "Darwin":  # macOS
+                subprocess.Popen(["open", ruta_abs])
+            else:  # Linux y otros
+                subprocess.Popen(["xdg-open", ruta_abs])
+                
+            return f"Abriendo: {ruta_abs}"
+        except Exception as e:
+            return f"Error al abrir el archivo: {str(e)}"
+
+    def obtener_escritorio(self):
+        """Devuelve la ruta al escritorio de manera multiplataforma"""
+        return os.path.join(os.path.expanduser("~"), "Desktop")
+
+    def obtener_documentos(self):
+        """Devuelve la ruta a documentos de manera multiplataforma"""
+        if SISTEMA_OPERATIVO == "Windows":
+            return os.path.join(os.path.expanduser("~"), "Documents")
+        elif SISTEMA_OPERATIVO == "Darwin":  # macOS
+            return os.path.join(os.path.expanduser("~"), "Documents")
+        else:  # Linux
+            # Intentar encontrar la carpeta de documentos según el estándar XDG
+            xdg_config = os.path.expanduser("~/.config/user-dirs.dirs")
+            if os.path.exists(xdg_config):
+                with open(xdg_config, 'r') as f:
+                    for line in f:
+                        if line.startswith('XDG_DOCUMENTS_DIR'):
+                            path = line.split('=')[1].strip().strip('"').replace('$HOME', os.path.expanduser('~'))
+                            return path
+            # Si no se encuentra, usar el valor predeterminado
+            return os.path.join(os.path.expanduser("~"), "Documents")
+
+    def ejecutar_comando(self, comando, shell=True, timeout=10):
+        """Ejecuta un comando del sistema de forma segura y multiplataforma"""
+        # Lista de comandos prohibidos
+        dangerous_commands = ['rm -rf', 'format', 'mkfs', 'dd', ':(){:|:&};:', 'wget', 'curl', 'del /f', 'deltree']
+        
+        # Verificar si el comando contiene alguna palabra peligrosa
+        if any(cmd in comando.lower() for cmd in dangerous_commands):
+            return "Comando rechazado por motivos de seguridad"
+        
+        try:
+            # Adaptar el comando según el sistema operativo
+            if SISTEMA_OPERATIVO == "Windows":
+                # Convertir comandos comunes de Unix a Windows
+                if comando.startswith("ls"):
+                    comando = comando.replace("ls", "dir", 1)
+                elif comando.startswith("cat"):
+                    comando = comando.replace("cat", "type", 1)
+                elif comando.startswith("clear"):
+                    comando = "cls"
+            
+            result = subprocess.run(
+                comando, 
+                shell=shell, 
+                capture_output=True, 
+                text=True, 
+                timeout=timeout
+            )
+            return {
+                'stdout': result.stdout,
+                'stderr': result.stderr,
+                'returncode': result.returncode
+            }
+        except subprocess.TimeoutExpired:
+            return "El comando excedió el tiempo límite"
+        except Exception as e:
+            return f"Error al ejecutar el comando: {str(e)}"
 
     def listen_callback(self, recognizer, audio):
         """Callback para procesar el audio capturado"""
@@ -249,10 +354,12 @@ class JarvisAssistant:
         self.audio_queue = queue.Queue()
         collected_text = []
         
-        # Configurar el callback para detener la escucha cuando se presiona Enter
-        keyboard.add_hotkey('enter', self.stop_listening_callback)
-        
-        print("Escuchando... (Presiona Enter para detener)")
+        # Configurar el callback para detener la escucha
+        if KEYBOARD_DISPONIBLE:
+            keyboard.add_hotkey('enter', self.stop_listening_callback)
+            print("Escuchando... (Presiona Enter para detener)")
+        else:
+            print("Escuchando... (Espera o presiona Ctrl+C para detener)")
         
         # Usar el reconocedor en modo no bloqueante
         with sr.Microphone() as source:
@@ -266,27 +373,32 @@ class JarvisAssistant:
             
             # Esperar hasta que se presione Enter o haya un timeout
             timeout = time.time() + 60  # 60 segundos máximo de escucha
-            while self.listening and time.time() < timeout:
-                try:
-                    # Verificar si hay texto reconocido en la cola
-                    text = self.audio_queue.get(timeout=0.5)
-                    collected_text.append(text)
-                    # Reiniciar el timeout cuando se detecta habla
-                    timeout = time.time() + 60
-                except queue.Empty:
-                    # No hay texto nuevo, continuar esperando
-                    pass
-                
-                # Si no ha habido actividad por 5 segundos y hay texto, detener
-                if collected_text and time.time() - timeout > -55:  # 60-55=5 segundos de inactividad
-                    print("Inactividad detectada, deteniendo escucha...")
-                    self.listening = False
+            try:
+                while self.listening and time.time() < timeout:
+                    try:
+                        # Verificar si hay texto reconocido en la cola
+                        text = self.audio_queue.get(timeout=0.5)
+                        collected_text.append(text)
+                        # Reiniciar el timeout cuando se detecta habla
+                        timeout = time.time() + 60
+                    except queue.Empty:
+                        # No hay texto nuevo, continuar esperando
+                        pass
+                    
+                    # Si no ha habido actividad por 5 segundos y hay texto, detener
+                    if collected_text and time.time() - timeout > -55:  # 60-55=5 segundos de inactividad
+                        print("Inactividad detectada, deteniendo escucha...")
+                        self.listening = False
+            except KeyboardInterrupt:
+                print("\nDetención manual solicitada...")
+                self.listening = False
             
             # Detener la escucha en segundo plano
             stop_listening(wait_for_stop=False)
         
-        # Eliminar el hotkey
-        keyboard.remove_hotkey('enter')
+        # Eliminar el hotkey si está disponible
+        if KEYBOARD_DISPONIBLE:
+            keyboard.remove_hotkey('enter')
         
         # Unir todo el texto reconocido
         full_text = " ".join(collected_text)
@@ -492,11 +604,19 @@ class JarvisAssistant:
                 IMPORTANTE: Cuando el usuario te pida realizar una acción en el sistema, DEBES responder con 'CODIGO:' seguido del código Python en una nueva línea.
                 IMPORTANTE: Cuando generes código Python, NO incluyas delimitadores de formato como ```python o ``` alrededor del código. 
                 Proporciona SOLO el código Python puro que se ejecutará directamente.
-
+                
                 (INCORRECTO:
                 CODIGO:
                 ```python
                 print("Hola mundo"))
+
+                El usuario está ejecutando este programa en un sistema """ + SISTEMA_OPERATIVO + """.
+                
+                Tienes acceso a las siguientes funciones multiplataforma:
+                - abrir_archivo(ruta): Abre un archivo con la aplicación predeterminada
+                - obtener_escritorio(): Devuelve la ruta al escritorio
+                - obtener_documentos(): Devuelve la ruta a documentos
+                - ejecutar_comando(comando): Ejecuta un comando del sistema de forma segura
                 
                 Tienes acceso a los siguientes módulos y funciones:
                 
@@ -509,17 +629,19 @@ class JarvisAssistant:
                    - time: sleep, time, ctime, strftime, localtime
                    - shutil: copy, copy2, copytree, move, rmtree
                    - psutil: process_iter, cpu_percent, virtual_memory, disk_usage, net_io_counters, sensors_temperatures
+                   - platform: system, platform, version, machine, processor, architecture
+                   - Path: de pathlib, para manejo de rutas multiplataforma
                 
                 2. Funciones integradas de Python:
                    - print, input, open, str, int, float, bool, list, dict, set, tuple
                    - len, range, enumerate, zip, map, filter, sorted, sum, min, max, abs, round
                    - any, all, dir, getattr, hasattr, isinstance, issubclass, type, id, help
                 
-                Ejemplos de código que puedes generar:
+                Ejemplos de código multiplataforma que puedes generar:
                 
                 1. Para crear un archivo de texto:
                 CODIGO:
-                ruta = os.path.join(os.path.expanduser("~"), "Desktop", "archivo.txt")
+                ruta = os.path.join(obtener_escritorio(), "archivo.txt")
                 with open(ruta, "w", encoding="utf-8") as f:
                     f.write("Contenido del archivo")
                 print(f"Archivo creado en: {ruta}")
@@ -528,8 +650,8 @@ class JarvisAssistant:
                 CODIGO:
                 patron = "documento"
                 ubicaciones = [
-                    os.path.join(os.path.expanduser("~"), "Desktop"),
-                    os.path.join(os.path.expanduser("~"), "Documents")
+                    obtener_escritorio(),
+                    obtener_documentos()
                 ]
                 archivos_encontrados = []
                 for ubicacion in ubicaciones:
@@ -541,8 +663,8 @@ class JarvisAssistant:
                 
                 if archivos_encontrados:
                     # Abrir el primer archivo encontrado
-                    subprocess.Popen(["start", "", archivos_encontrados[0]], shell=True)
-                    print(f"Abriendo: {archivos_encontrados[0]}")
+                    resultado = abrir_archivo(archivos_encontrados[0])
+                    print(resultado)
                 else:
                     print("No se encontraron archivos")
                 
@@ -552,6 +674,8 @@ class JarvisAssistant:
                 memoria = psutil.virtual_memory()
                 disco = psutil.disk_usage('/')
                 
+                print(f"Sistema operativo: {platform.system()} {platform.version()}")
+                print(f"Arquitectura: {platform.machine()}")
                 print(f"Uso de CPU: {cpu}%")
                 print(f"Memoria total: {memoria.total / (1024**3):.2f} GB")
                 print(f"Memoria disponible: {memoria.available / (1024**3):.2f} GB")
@@ -559,8 +683,14 @@ class JarvisAssistant:
                 
                 4. Para ejecutar un comando del sistema:
                 CODIGO:
-                resultado = subprocess.run("dir", shell=True, capture_output=True, text=True)
-                print(resultado.stdout)
+                # El comando se adaptará automáticamente según el sistema operativo
+                if SISTEMA_OPERATIVO == "Windows":
+                    comando = "dir"
+                else:
+                    comando = "ls -la"
+                
+                resultado = ejecutar_comando(comando)
+                print(resultado['stdout'])
                 
                 5. Para listar procesos en ejecución:
                 CODIGO:
@@ -574,18 +704,36 @@ class JarvisAssistant:
             
             messages.extend(self.conversation_history)
             
-            response = client1.chat.completions.create(
-                model="gpt-4",
-                messages=messages,
-                max_tokens=self.config["max_tokens"],
-                temperature=self.config["temperatura"]
-            )
+            # Añadir manejo de errores más detallado
+            try:
+                response = client1.chat.completions.create(
+                    model="gpt-4",
+                    messages=messages,
+                    max_tokens=self.config["max_tokens"],
+                    temperature=self.config["temperatura"]
+                )
             
-            response_text = response.choices[0].message.content
-            return response_text
+                response_text = response.choices[0].message.content
+                return response_text
+            except Exception as e:
+                print(f"Error específico en la solicitud a OpenAI: {str(e)}")
+                # Registrar más detalles para depuración
+                import traceback
+                traceback.print_exc()
+                return "Hubo un error al obtener la respuesta. Por favor, intenta de nuevo."
         except Exception as e:
-            print(f"Error en la solicitud a OpenAI: {str(e)}")
-            return "Hubo un error al obtener la respuesta."
+            print(f"Error general en get_gpt_response: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return "Ocurrió un error inesperado. Por favor, intenta de nuevo."
+
+def configurar_hotkeys(jarvis):
+    """Configura las teclas de acceso rápido si el módulo keyboard está disponible"""
+    if KEYBOARD_DISPONIBLE:
+        keyboard.add_hotkey('esc', jarvis.interrupt_speech)
+        print("Tecla ESC configurada para interrumpir la voz.")
+    else:
+        print("Módulo keyboard no disponible. Las teclas de acceso rápido no funcionarán.")
 
 def mostrar_menu_configuracion(config_actual):
     """Muestra un menú para configurar las opciones de JARVIS"""
@@ -827,8 +975,8 @@ async def main():
     # Iniciar JARVIS con la configuración seleccionada
     jarvis = JarvisAssistant(config)
     
-    # Configurar la tecla para interrumpir la voz (Escape)
-    keyboard.add_hotkey('esc', jarvis.interrupt_speech)
+    # Configurar teclas de acceso rápido
+    configurar_hotkeys(jarvis)
     
     # Mostrar información sobre el modo actual
     print("\n" + "=" * 50)
@@ -839,7 +987,8 @@ async def main():
         print("Escribe tus comandos directamente. Escribe 'salir' o 'adiós' para terminar.")
     else:
         print("Presiona Enter para hablar. Presiona Enter nuevamente para detener la grabación.")
-        print("Presiona ESC para interrumpir la voz de JARVIS.")
+        if KEYBOARD_DISPONIBLE:
+            print("Presiona ESC para interrumpir la voz de JARVIS.")
     
     print("=" * 50)
     
