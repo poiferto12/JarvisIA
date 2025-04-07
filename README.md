@@ -161,4 +161,4 @@ Si deseas contribuir (por favor), sigue estos pasos:
 
 ## Contacto y Soporte
 
-Si tienes dudas o problemas, abre un "Issue" en el repositorio e intentaré ayudar. (Tengo que decir que estoy haciendo la mayoría de esto con IA, ya que no tengo tanto conocimiento sobre el tema y es muy probable que no pueda ser siempre de ayuda, igualmente haré todo lo que esté en mi poder).
+Si tienes dudas o problemas, abre un "Issue" en el repositorio e intentaré ayudar. (Estoy haciendo la mayoría de esto con IA, ya que no tengo tanto conocimiento sobre el tema y es muy probable que no pueda hacer mucho. AYUDA POR FAVOR)
