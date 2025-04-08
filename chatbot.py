@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import psutil
 import yaml
+import os.path
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -191,6 +192,206 @@ class Timer:
         end_time = time.time()
         execution_time = end_time - self.start_time
         print(f"Tiempo de {self.name}: {execution_time:.4f} segundos")
+
+
+class ConfigMenu:
+    """
+    Clase para manejar el menú de configuración del chatbot.
+    """
+    
+    def __init__(self, config_path: str = "config.yaml"):
+        """
+        Inicializa el menú de configuración.
+        
+        Args:
+            config_path: Ruta al archivo de configuración.
+        """
+        self.config_path = config_path
+        self.config = self.load_config()
+        self.colores = {
+            "titulo": Fore.CYAN + Style.BRIGHT,
+            "opcion": Fore.GREEN,
+            "valor": Fore.YELLOW,
+            "error": Fore.RED,
+            "exito": Fore.GREEN + Style.BRIGHT,
+            "reset": Style.RESET_ALL,
+        }
+        
+    def load_config(self) -> Dict[str, Any]:
+        """
+        Carga la configuración desde un archivo YAML.
+        
+        Returns:
+            Diccionario con la configuración.
+        """
+        default_config = {
+            "modelo_gpt": "gpt-4o",
+            "max_tokens": 1000,
+            "temperatura": 0.7,
+            "permitir_delimitadores": False,
+            "modo_interaccion": "texto",
+            "vector_db": {"type": "chroma"},
+            "mostrar_menu_inicio": True
+        }
+        
+        try:
+            if os.path.exists(self.config_path):
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    config = yaml.safe_load(f)
+                
+                # Asegurarse de que todas las claves necesarias estén presentes
+                for key, value in default_config.items():
+                    if key not in config:
+                        config[key] = value
+                
+                return config
+            else:
+                return default_config
+        except Exception as e:
+            print(f"Error al cargar la configuración: {e}")
+            return default_config
+    
+    def save_config(self) -> bool:
+        """
+        Guarda la configuración en un archivo YAML.
+        
+        Returns:
+            True si se guardó correctamente, False en caso contrario.
+        """
+        try:
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                yaml.dump(self.config, f, default_flow_style=False)
+            return True
+        except Exception as e:
+            print(f"Error al guardar la configuración: {e}")
+            return False
+    
+    def display_menu(self) -> None:
+        """
+        Muestra el menú de configuración.
+        """
+        print(f"\n{self.colores['titulo']}=== CONFIGURACIÓN DE JARVIS ==={self.colores['reset']}")
+        print(f"{self.colores['opcion']}1. Modelo GPT:{self.colores['reset']} {self.colores['valor']}{self.config['modelo_gpt']}{self.colores['reset']}")
+        print(f"{self.colores['opcion']}2. Temperatura:{self.colores['reset']} {self.colores['valor']}{self.config['temperatura']}{self.colores['reset']}")
+        print(f"{self.colores['opcion']}3. Máximo de tokens:{self.colores['reset']} {self.colores['valor']}{self.config['max_tokens']}{self.colores['reset']}")
+        print(f"{self.colores['opcion']}4. Permitir delimitadores de código:{self.colores['reset']} {self.colores['valor']}{self.config['permitir_delimitadores']}{self.colores['reset']}")
+        print(f"{self.colores['opcion']}5. Modo de interacción:{self.colores['reset']} {self.colores['valor']}{self.config['modo_interaccion']}{self.colores['reset']}")
+        print(f"{self.colores['opcion']}6. Mostrar este menú al inicio:{self.colores['reset']} {self.colores['valor']}{self.config['mostrar_menu_inicio']}{self.colores['reset']}")
+        print(f"{self.colores['opcion']}7. Guardar y salir{self.colores['reset']}")
+        print(f"{self.colores['opcion']}8. Salir sin guardar{self.colores['reset']}")
+    
+    def run(self) -> Dict[str, Any]:
+        """
+        Ejecuta el menú de configuración.
+        
+        Returns:
+            Diccionario con la configuración actualizada.
+        """
+        while True:
+            self.display_menu()
+            
+            try:
+                choice = input(f"\n{self.colores['opcion']}Selecciona una opción (1-8): {self.colores['reset']}")
+                
+                if choice == "1":
+                    models = ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"]
+                    print(f"\n{self.colores['titulo']}Modelos disponibles:{self.colores['reset']}")
+                    for i, model in enumerate(models, 1):
+                        print(f"{self.colores['opcion']}{i}. {model}{self.colores['reset']}")
+                    
+                    model_choice = input(f"\n{self.colores['opcion']}Selecciona un modelo (1-{len(models)}): {self.colores['reset']}")
+                    try:
+                        model_index = int(model_choice) - 1
+                        if 0 <= model_index < len(models):
+                            self.config["modelo_gpt"] = models[model_index]
+                            print(f"{self.colores['exito']}Modelo actualizado a {models[model_index]}{self.colores['reset']}")
+                        else:
+                            print(f"{self.colores['error']}Opción inválida{self.colores['reset']}")
+                    except ValueError:
+                        print(f"{self.colores['error']}Por favor, introduce un número{self.colores['reset']}")
+                
+                elif choice == "2":
+                    temp = input(f"{self.colores['opcion']}Introduce la temperatura (0.0-1.0): {self.colores['reset']}")
+                    try:
+                        temp_value = float(temp)
+                        if 0.0 <= temp_value <= 1.0:
+                            self.config["temperatura"] = temp_value
+                            print(f"{self.colores['exito']}Temperatura actualizada a {temp_value}{self.colores['reset']}")
+                        else:
+                            print(f"{self.colores['error']}La temperatura debe estar entre 0.0 y 1.0{self.colores['reset']}")
+                    except ValueError:
+                        print(f"{self.colores['error']}Por favor, introduce un número válido{self.colores['reset']}")
+                
+                elif choice == "3":
+                    tokens = input(f"{self.colores['opcion']}Introduce el máximo de tokens (100-4000): {self.colores['reset']}")
+                    try:
+                        tokens_value = int(tokens)
+                        if 100 <= tokens_value <= 4000:
+                            self.config["max_tokens"] = tokens_value
+                            print(f"{self.colores['exito']}Máximo de tokens actualizado a {tokens_value}{self.colores['reset']}")
+                        else:
+                            print(f"{self.colores['error']}El máximo de tokens debe estar entre 100 y 4000{self.colores['reset']}")
+                    except ValueError:
+                        print(f"{self.colores['error']}Por favor, introduce un número entero{self.colores['reset']}")
+                
+                elif choice == "4":
+                    delimiters = input(f"{self.colores['opcion']}¿Permitir delimitadores de código? (s/n): {self.colores['reset']}")
+                    if delimiters.lower() in ["s", "si", "sí", "y", "yes"]:
+                        self.config["permitir_delimitadores"] = True
+                        print(f"{self.colores['exito']}Delimitadores de código permitidos{self.colores['reset']}")
+                    elif delimiters.lower() in ["n", "no"]:
+                        self.config["permitir_delimitadores"] = False
+                        print(f"{self.colores['exito']}Delimitadores de código no permitidos{self.colores['reset']}")
+                    else:
+                        print(f"{self.colores['error']}Opción inválida{self.colores['reset']}")
+                
+                elif choice == "5":
+                    modes = ["texto", "audio"]
+                    print(f"\n{self.colores['titulo']}Modos disponibles:{self.colores['reset']}")
+                    for i, mode in enumerate(modes, 1):
+                        print(f"{self.colores['opcion']}{i}. {mode}{self.colores['reset']}")
+                    
+                    mode_choice = input(f"\n{self.colores['opcion']}Selecciona un modo (1-{len(modes)}): {self.colores['reset']}")
+                    try:
+                        mode_index = int(mode_choice) - 1
+                        if 0 <= mode_index < len(modes):
+                            self.config["modo_interaccion"] = modes[mode_index]
+                            print(f"{self.colores['exito']}Modo actualizado a {modes[mode_index]}{self.colores['reset']}")
+                            if modes[mode_index] == "audio":
+                                print(f"{self.colores['error']}Nota: El modo de audio aún no está completamente implementado{self.colores['reset']}")
+                        else:
+                            print(f"{self.colores['error']}Opción inválida{self.colores['reset']}")
+                    except ValueError:
+                        print(f"{self.colores['error']}Por favor, introduce un número{self.colores['reset']}")
+                
+                elif choice == "6":
+                    show_menu = input(f"{self.colores['opcion']}¿Mostrar este menú al inicio? (s/n): {self.colores['reset']}")
+                    if show_menu.lower() in ["s", "si", "sí", "y", "yes"]:
+                        self.config["mostrar_menu_inicio"] = True
+                        print(f"{self.colores['exito']}El menú se mostrará al inicio{self.colores['reset']}")
+                    elif show_menu.lower() in ["n", "no"]:
+                        self.config["mostrar_menu_inicio"] = False
+                        print(f"{self.colores['exito']}El menú no se mostrará al inicio{self.colores['reset']}")
+                    else:
+                        print(f"{self.colores['error']}Opción inválida{self.colores['reset']}")
+                
+                elif choice == "7":
+                    if self.save_config():
+                        print(f"{self.colores['exito']}Configuración guardada correctamente{self.colores['reset']}")
+                    else:
+                        print(f"{self.colores['error']}Error al guardar la configuración{self.colores['reset']}")
+                    return self.config
+                
+                elif choice == "8":
+                    print(f"{self.colores['titulo']}Saliendo sin guardar{self.colores['reset']}")
+                    return self.config
+                
+                else:
+                    print(f"{self.colores['error']}Opción inválida{self.colores['reset']}")
+            
+            except KeyboardInterrupt:
+                print(f"\n{self.colores['titulo']}Saliendo sin guardar{self.colores['reset']}")
+                return self.config
 
 
 class JarvisMemory:
@@ -803,6 +1004,7 @@ class Chatbot:
             "Path": Path,
             "archivos_encontrados": [],
             "abrir_archivo": self.abrir_archivo,
+            "obtener_archivo": self.obtener_archivo,
             "obtener_escritorio": self.obtener_escritorio,
             "obtener_documentos": self.obtener_documentos,
             "obtener_descargas": self.obtener_descargas,
@@ -818,35 +1020,19 @@ class Chatbot:
 
     def load_config(self, config_path: str) -> None:
         """
-        Carga la configuración desde un archivo YAML.
+        Carga la configuración desde un archivo YAML o desde el menú de configuración.
 
         Args:
             config_path: Ruta al archivo de configuración.
         """
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                self.config = yaml.safe_load(f)
-            logger.info(f"Configuración cargada desde {config_path}")
-        except FileNotFoundError:
-            logger.error(f"Archivo de configuración no encontrado en {config_path}")
-            self.config = {
-                "modelo_gpt": "gpt-4o",
-                "max_tokens": 1000,
-                "temperatura": 0.7,
-                "permitir_delimitadores": False,
-                "vector_db": {"type": "chroma"}
-            }
-            logger.info("Usando configuración por defecto")
-        except yaml.YAMLError as e:
-            logger.error(f"Error al leer el archivo de configuración: {e}")
-            self.config = {
-                "modelo_gpt": "gpt-4o",
-                "max_tokens": 1000,
-                "temperatura": 0.7,
-                "permitir_delimitadores": False,
-                "vector_db": {"type": "chroma"}
-            }
-            logger.info("Usando configuración por defecto")
+        config_menu = ConfigMenu(config_path)
+        self.config = config_menu.config
+        
+        # Mostrar el menú de configuración si está habilitado
+        if self.config.get("mostrar_menu_inicio", True):
+            self.config = config_menu.run()
+        
+        logger.info("Configuración cargada")
 
     def timer(self, name: str):
         """
@@ -1000,6 +1186,18 @@ class Chatbot:
         except Exception as e:
             logger.error(f"Error al abrir el archivo: {e}")
             return f"Error al abrir el archivo '{ruta}': {str(e)}"
+
+    def obtener_archivo(self, ruta: str) -> str:
+        """
+        Obtiene la ruta absoluta de un archivo.
+
+        Args:
+            ruta: Ruta del archivo.
+
+        Returns:
+            La ruta absoluta del archivo.
+        """
+        return os.path.abspath(ruta)
 
     def obtener_escritorio(self) -> str:
         """
@@ -1625,6 +1823,7 @@ class Chatbot:
 
 Tienes acceso a las siguientes funciones multiplataforma:
 - abrir_archivo(ruta): Abre un archivo con la aplicación predeterminada
+- obtener_archivo(ruta): Obtiene la ruta absoluta de un archivo
 - obtener_escritorio(): Devuelve la ruta al escritorio
 - obtener_documentos(): Devuelve la ruta a documentos
 - obtener_descargas(): Devuelve la ruta a descargas
@@ -1731,7 +1930,7 @@ Puedo recordar los resultados de comandos anteriores. Si el usuario hace referen
     async def main_loop(self):
         """Bucle principal del chatbot."""
         print(f"{self.colores['principal']}¡Bienvenido a JARVIS! Estoy listo para ayudarte.{self.colores['reset']}")
-        print(f"{self.colores['secundario']}Escribe 'salir' para terminar.{self.colores['reset']}")
+        print(f"{self.colores['secundario']}Escribe 'salir' para terminar o 'config' para abrir el menú de configuración.{self.colores['reset']}")
         
         while True:
             try:
@@ -1739,6 +1938,10 @@ Puedo recordar los resultados de comandos anteriores. Si el usuario hace referen
                 if command.lower() in ["salir", "exit", "quit", "q"]:
                     print(f"{self.colores['principal']}¡Hasta luego!{self.colores['reset']}")
                     break
+                elif command.lower() in ["config", "configuracion", "configuración", "settings"]:
+                    config_menu = ConfigMenu(DEFAULT_CONFIG_PATH)
+                    self.config = config_menu.run()
+                    continue
                 await self.process_command(command)
             except KeyboardInterrupt:
                 print(f"\n{self.colores['principal']}Saliendo de JARVIS...{self.colores['reset']}")
