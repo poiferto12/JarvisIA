@@ -23,6 +23,9 @@ Inspirado en el icónico J.A.R.V.I.S. de Tony Stark. Utiliza OpenAI GPT-4, Eleve
 ```plaintext
 - Python 3.8 o superior (asegúrate de marcar "Add Python to PATH" durante la instalación)
 - Git para Windows
+- Microsoft Visual C++ Build Tools (necesario para compilar algunas dependencias)
+  Descárgalo de: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+  Durante la instalación, selecciona "Desarrollo de escritorio con C++"
 - Microsoft Visual C++ Redistributable (necesario para algunas dependencias)
 ```
 
@@ -87,14 +90,15 @@ cd JarvisIA
 ```shellscript
 # Ubuntu/Debian
 sudo apt-get update
-sudo apt-get install python3-pyaudio portaudio19-dev
+sudo apt-get install python3-pyaudio portaudio19-dev python3-dev build-essential
 
 # Fedora
-sudo dnf install portaudio portaudio-devel
+sudo dnf install portaudio portaudio-devel python3-devel gcc-c++
 
 # Arch Linux
-sudo pacman -S portaudio
+sudo pacman -S portaudio base-devel
 ```
+
 
 #### Dependencias de Python:
 
